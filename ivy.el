@@ -2827,6 +2827,34 @@ Possible choices are 'ivy-magic-slash-non-match-cd-selected,
                   magic)
              (ivy--create-and-cd canonical))))))
 
+(defcustom ivy-magic-dollar t
+  "When non-nil, $ will read an file path environment variable."
+  :type 'boolean)
+
+(defun ivy--magic-file-dollar ()
+  "Read a file path environment variable and insert it into the
+minibuffer."
+  (let ((enable-recursive-minibuffers t)
+        (old-last ivy-last))
+    (ivy-read "Env: "
+              (cl-loop for pair in process-environment
+                       for (var val) = (split-string pair "=" t)
+                       if (and val (not (equal "" val)))
+                       if (file-exists-p
+                           (if (file-name-absolute-p val)
+                               val
+                             (setq val
+                                   (expand-file-name val ivy--directory))))
+                       collect (cons var val))
+              :action (lambda (x)
+                        (ivy--reset-state (setq ivy-last old-last))
+                        (let ((path (cdr x)))
+                          (when (file-accessible-directory-p path)
+                            (setq path (file-name-as-directory path)))
+                          (delete-minibuffer-contents)
+                          (insert (abbreviate-file-name path)))
+                        (ivy--cd-maybe)))))
+
 (defcustom ivy-magic-tilde t
   "When non-nil, ~ will move home when selecting files.
 Otherwise, ~/ will move home."
@@ -2879,6 +2907,9 @@ Should be run via minibuffer `post-command-hook'."
                         (and (string= "~" ivy-text)
                              ivy-magic-tilde))
                     (ivy--cd (expand-file-name "~/")))
+                   ((and ivy-magic-dollar
+                         (string= "$" ivy-text))
+                    (ivy--magic-file-dollar))
                    ((string-match "/\\'" ivy-text)
                     (ivy--magic-file-slash))))
             ((eq (ivy-state-collection ivy-last) #'internal-complete-buffer)
