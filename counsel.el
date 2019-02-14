@@ -1211,14 +1211,33 @@ INITIAL-INPUT can be given as the initial minibuffer input."
 (defun counsel-git-occur ()
   "Occur function for `counsel-git' using `counsel-cmd-to-dired'."
   (cd (ivy-state-directory ivy-last))
-  (counsel-cmd-to-dired
-   (counsel--expand-ls
-    (format "%s | grep -i -E '%s' | xargs ls"
-            counsel-git-cmd
-            (counsel--elisp-to-pcre ivy--old-re)))))
+  (if counsel-file-occur-use-search
+      (counsel-cmd-to-dired
+       (counsel--expand-ls
+        (format "%s | grep -i -E '%s' | xargs ls"
+                counsel-git-cmd
+                (counsel--elisp-to-pcre ivy--old-re))))
+    (counsel-dired-occur)))
 
 (defvar counsel-dired-listing-switches "-alh"
   "Switches passed to `ls' for `counsel-cmd-to-dired'.")
+
+(setq counsel-file-occur-use-search nil)
+(defcustom counsel-file-occur-use-search t
+  "If non-nil, use search tools such as grep to create dired buffer.
+If nil, use builtin emacs functions to build dired buffers for
+occur mode. The builtin method is slower on large filesets, but
+supports advanced regex builders like `ivy--regex-plus' and
+`ivy--regex-ignore-order'."
+  :type 'boolean)
+
+(defun counsel-dired-occur ()
+  (let ((inhibit-read-only t))
+    (erase-buffer)
+    (dired-mode default-directory counsel-dired-listing-switches)
+    (dired (cons default-directory ivy--old-cands))
+    (dired-goto-file
+     (expand-file-name (ivy-state-current ivy-last)))))
 
 (defun counsel-cmd-to-dired (full-cmd &optional filter)
   "Adapted from `find-dired'."
@@ -1875,16 +1894,18 @@ When INITIAL-INPUT is non-nil, use it in the minibuffer during completion."
      (concat " -type " type exclude-dots " | grep") cmd)))
 
 (defun counsel-find-file-occur ()
-  (require 'find-dired)
   (cd ivy--directory)
-  (if counsel-find-file-occur-use-find
-      (counsel-cmd-to-dired
-       (counsel--occur-cmd-find)
-       'find-dired-filter)
-    (counsel-cmd-to-dired
-     (counsel--expand-ls
-      (format counsel-find-file-occur-cmd
-              (counsel--elisp-to-pcre ivy--old-re))))))
+  (cond ((not counsel-file-occur-use-search)
+         (counsel-dired-occur))
+        (counsel-find-file-occur-use-find
+         (require 'find-dired)
+         (counsel-cmd-to-dired
+          (counsel--occur-cmd-find)
+          'find-dired-filter))
+        (t (counsel-cmd-to-dired
+            (counsel--expand-ls
+             (format counsel-find-file-occur-cmd
+                     (counsel--elisp-to-pcre ivy--old-re)))))))
 
 (defun counsel-up-directory ()
   "Go to the parent directory preselecting the current one.
